@@ -24,16 +24,33 @@ public class OrderListener implements MessageListenerConcurrently {
     @Override
     public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> list, ConsumeConcurrentlyContext context) {
         logger.info("消费者线程监听到消息。");
-        try{
-            for (MessageExt message:list) {
-                logger.info("开始处理订单数据，准备增加积分....");
-                OrderDTO order  = JSONObject.parseObject(message.getBody(), OrderDTO.class);
-                pointsService.increasePoints(order);
+        for (MessageExt message:list) {
+            if (!processor(message)){
+                return ConsumeConcurrentlyStatus.RECONSUME_LATER;
             }
-            return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+        }
+        return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+    }
+
+    /**
+     * 消息处理，第3次处理失败后，发送邮件通知人工介入
+     * @param message
+     * @return
+     */
+    private boolean processor(MessageExt message){
+        String body = new String(message.getBody());
+        try {
+            logger.info("消息处理....{}",body);
+            int k = 1/0;
+            return true;
         }catch (Exception e){
-            logger.error("处理消费者数据发生异常。{}",e);
-            return ConsumeConcurrentlyStatus.RECONSUME_LATER;
+            if(message.getReconsumeTimes()>=3){
+                logger.error("消息重试已达最大次数，将通知业务人员排查问题。{}",message.getMsgId());
+                //发邮件
+//                sendMail(message);
+                return true;
+            }
+            return false;
         }
     }
 }
